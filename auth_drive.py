@@ -6,7 +6,11 @@ Google Drive OAuth2 認証の初回セットアップスクリプト
 from pathlib import Path
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-SCOPES = ["https://www.googleapis.com/auth/drive"]
+SCOPES = [
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/calendar",
+    "https://www.googleapis.com/auth/spreadsheets",
+]
 CREDENTIALS_FILE = Path(__file__).parent / "credentials.json"
 TOKEN_FILE = Path(__file__).parent / "token.json"
 
@@ -34,7 +38,7 @@ def main():
     TOKEN_FILE.write_text(creds.to_json())
     print(f"\n✅ 認証成功！token.json を保存しました")
     print(f"保存先: {TOKEN_FILE}")
-    print("\nこれでサーバーからGoogle Driveにアクセスできます。")
+    print("\nこれでサーバーからGoogle Drive・Calendar・Sheetsにアクセスできます。")
 
 
 if __name__ == "__main__":

@@ -1,55 +1,14 @@
 import io
-import json
-import os
 from pathlib import Path
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload, MediaIoBaseUpload, MediaIoBaseDownload
 
-SCOPES = ["https://www.googleapis.com/auth/drive"]
-CREDENTIALS_FILE = Path(__file__).parent.parent / "credentials.json"
-TOKEN_FILE = Path(__file__).parent.parent / "token.json"
-
 
 class DriveActions:
-    def __init__(self):
-        self.service = None
+    def __init__(self, creds):
+        self.service = build("drive", "v3", credentials=creds)
 
     def _get_service(self):
-        if self.service:
-            return self.service
-
-        creds = None
-
-        # 環境変数からトークンを読み込む（Railway等クラウド環境向け）
-        token_json_str = os.environ.get("GOOGLE_TOKEN_JSON")
-        if token_json_str:
-            creds = Credentials.from_authorized_user_info(
-                json.loads(token_json_str), SCOPES
-            )
-        elif TOKEN_FILE.exists():
-            creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
-
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                if not CREDENTIALS_FILE.exists():
-                    raise FileNotFoundError(
-                        "credentials.json が見つかりません。"
-                        "Google Cloud Console から OAuth2 認証情報をダウンロードして "
-                        "line-agent/credentials.json に配置し、python auth_drive.py を実行してください。"
-                    )
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    str(CREDENTIALS_FILE), SCOPES
-                )
-                creds = flow.run_local_server(port=0)
-
-            TOKEN_FILE.write_text(creds.to_json())
-
-        self.service = build("drive", "v3", credentials=creds)
         return self.service
 
     def create_folder(self, name: str, parent_id: str = None) -> str:
