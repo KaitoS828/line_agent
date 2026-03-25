@@ -11,7 +11,7 @@ from linebot.v3.webhook import (
     MessageEvent,
     WebhookParser,
 )
-from linebot.v3.webhooks import ImageMessageContent, TextMessageContent
+from linebot.v3.webhooks import AudioMessageContent, ImageMessageContent, TextMessageContent
 from linebot.v3.messaging import (
     AsyncApiClient,
     AsyncMessagingApi,
@@ -68,8 +68,8 @@ async def send_line_message(user_id: str, text: str) -> None:
             )
 
 
-async def download_line_image(message_id: str) -> bytes:
-    """LINE APIから画像をダウンロード"""
+async def download_line_content(message_id: str) -> bytes:
+    """LINE APIからコンテンツ（画像・音声等）をダウンロード"""
     url = f"https://api-data.line.me/v2/bot/message/{message_id}/content"
     headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
     async with httpx.AsyncClient() as client:
@@ -99,7 +99,7 @@ async def process_image(user_id: str, message_id: str) -> None:
         await send_line_message(user_id, "🖼️ 画像を分析中...")
 
         # 画像をダウンロード
-        image_data = await download_line_image(message_id)
+        image_data = await download_line_content(message_id)
         image_b64 = base64.b64encode(image_data).decode("utf-8")
 
         # Claude Vision で画像を分析
@@ -112,6 +112,26 @@ async def process_image(user_id: str, message_id: str) -> None:
 
     except Exception as e:
         await send_line_message(user_id, f"❌ 画像処理エラー:\n{str(e)}")
+
+
+async def process_audio(user_id: str, message_id: str) -> None:
+    """バックグラウンドで音声メッセージを文字起こし→議事録作成してLINEに返信"""
+    try:
+        await send_line_message(user_id, "🎙️ 音声を文字起こし中...")
+
+        # 音声をダウンロード
+        audio_data = await download_line_content(message_id)
+
+        # Whisper で文字起こし → Claude で議事録作成
+        loop = asyncio.get_event_loop()
+        response = await loop.run_in_executor(
+            None, agent.run_with_audio, audio_data
+        )
+
+        await send_line_message(user_id, response)
+
+    except Exception as e:
+        await send_line_message(user_id, f"❌ 音声処理エラー:\n{str(e)}")
 
 
 @app.post("/webhook")
@@ -142,6 +162,13 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
         elif isinstance(event.message, ImageMessageContent):
             background_tasks.add_task(
                 process_image,
+                user_id=user_id,
+                message_id=event.message.id,
+            )
+        # 音声メッセージ
+        elif isinstance(event.message, AudioMessageContent):
+            background_tasks.add_task(
+                process_audio,
                 user_id=user_id,
                 message_id=event.message.id,
             )
