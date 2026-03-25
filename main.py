@@ -1,3 +1,9 @@
+"""LINE Agent — FastAPI エントリポイント
+
+LINEからのWebhookを受け取り、CEO Agentに処理を委譲する。
+CEOが専門エージェント軍団を統括し、結果をLINEに返信する。
+"""
+
 import asyncio
 import base64
 import os
@@ -26,24 +32,26 @@ LINE_CHANNEL_ACCESS_TOKEN = os.environ["LINE_CHANNEL_ACCESS_TOKEN"]
 LINE_CHANNEL_SECRET = os.environ["LINE_CHANNEL_SECRET"]
 AUTHORIZED_USER_ID = os.environ["LINE_AUTHORIZED_USER_ID"]
 
-# Agent は起動時に1回だけ初期化
-from agent import LineAgent, get_google_creds
+# ── CEO 初期化 ─────────────────────────────────────────────────
+from ceo import CEOAgent, get_google_creds
 from actions.calendar import CalendarActions
 from scheduler import create_scheduler
 
-agent = LineAgent()
+ceo = CEOAgent()
 
 # スケジューラー用のカレンダーアクション
 _creds = get_google_creds()
 _calendar_for_scheduler = CalendarActions(_creds)
 
 
+# ── アプリ起動/停止 ────────────────────────────────────────────
+
 @asynccontextmanager
 async def lifespan(app):
-    """アプリ起動時にスケジューラーを開始、終了時に停止"""
+    """起動時にスケジューラーを開始、停止時にシャットダウン"""
     scheduler = create_scheduler(send_line_message, _calendar_for_scheduler, AUTHORIZED_USER_ID)
     scheduler.start()
-    print(f"⏰ スケジューラー起動 — 朝の通知が有効です")
+    print("⏰ スケジューラー起動 — 朝の通知が有効です")
     yield
     scheduler.shutdown()
     print("⏰ スケジューラー停止")
@@ -53,13 +61,15 @@ app = FastAPI(lifespan=lifespan)
 parser = WebhookParser(LINE_CHANNEL_SECRET)
 
 
+# ── LINE送信 ───────────────────────────────────────────────────
+
 async def send_line_message(user_id: str, text: str) -> None:
     """LINEにプッシュメッセージを送信（4999文字ごとに分割）"""
     chunks = [text[i : i + 4999] for i in range(0, len(text), 4999)]
     configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
     async with AsyncApiClient(configuration) as api_client:
         line_bot_api = AsyncMessagingApi(api_client)
-        for chunk in chunks[:5]:  # 最大5メッセージ
+        for chunk in chunks[:5]:
             await line_bot_api.push_message(
                 PushMessageRequest(
                     to=user_id,
@@ -78,61 +88,45 @@ async def download_line_content(message_id: str) -> bytes:
         return resp.content
 
 
-async def process_message(user_id: str, text: str) -> None:
-    """バックグラウンドでテキストメッセージを処理してLINEに返信"""
+# ── メッセージ処理（バックグラウンドタスク）─────────────────────
+
+async def process_text(user_id: str, text: str) -> None:
+    """テキスト → CEOが判断して適切なエージェントに委譲"""
     try:
         await send_line_message(user_id, "⚙️ 処理中...")
-
-        # Claude Agent を実行（同期処理をスレッドプールで実行）
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, agent.run, text)
-
+        response = await loop.run_in_executor(None, ceo.process_text, text)
         await send_line_message(user_id, response)
-
     except Exception as e:
         await send_line_message(user_id, f"❌ エラーが発生しました:\n{str(e)}")
 
 
 async def process_image(user_id: str, message_id: str) -> None:
-    """バックグラウンドで画像メッセージを処理してLINEに返信"""
+    """画像 → CEOがVisionAgentに委譲"""
     try:
         await send_line_message(user_id, "🖼️ 画像を分析中...")
-
-        # 画像をダウンロード
         image_data = await download_line_content(message_id)
         image_b64 = base64.b64encode(image_data).decode("utf-8")
-
-        # Claude Vision で画像を分析
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, agent.run_with_image, image_b64
-        )
-
+        response = await loop.run_in_executor(None, ceo.process_image, image_b64)
         await send_line_message(user_id, response)
-
     except Exception as e:
         await send_line_message(user_id, f"❌ 画像処理エラー:\n{str(e)}")
 
 
 async def process_audio(user_id: str, message_id: str) -> None:
-    """バックグラウンドで音声メッセージを文字起こし→議事録作成してLINEに返信"""
+    """音声 → CEOがTranscriberAgentに委譲"""
     try:
         await send_line_message(user_id, "🎙️ 音声を文字起こし中...")
-
-        # 音声をダウンロード
         audio_data = await download_line_content(message_id)
-
-        # Whisper で文字起こし → Claude で議事録作成
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
-            None, agent.run_with_audio, audio_data
-        )
-
+        response = await loop.run_in_executor(None, ceo.process_audio, audio_data)
         await send_line_message(user_id, response)
-
     except Exception as e:
         await send_line_message(user_id, f"❌ 音声処理エラー:\n{str(e)}")
 
+
+# ── Webhook ────────────────────────────────────────────────────
 
 @app.post("/webhook")
 async def webhook(request: Request, background_tasks: BackgroundTasks):
@@ -151,27 +145,12 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
         if user_id != AUTHORIZED_USER_ID:
             continue
 
-        # テキストメッセージ
         if isinstance(event.message, TextMessageContent):
-            background_tasks.add_task(
-                process_message,
-                user_id=user_id,
-                text=event.message.text,
-            )
-        # 画像メッセージ
+            background_tasks.add_task(process_text, user_id, event.message.text)
         elif isinstance(event.message, ImageMessageContent):
-            background_tasks.add_task(
-                process_image,
-                user_id=user_id,
-                message_id=event.message.id,
-            )
-        # 音声メッセージ
+            background_tasks.add_task(process_image, user_id, event.message.id)
         elif isinstance(event.message, AudioMessageContent):
-            background_tasks.add_task(
-                process_audio,
-                user_id=user_id,
-                message_id=event.message.id,
-            )
+            background_tasks.add_task(process_audio, user_id, event.message.id)
 
     return {"status": "ok"}
 
