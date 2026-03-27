@@ -21,6 +21,7 @@ from linebot.v3.messaging import (
     AsyncApiClient,
     AsyncMessagingApi,
     Configuration,
+    ImageMessage,
     PushMessageRequest,
     TextMessage,
 )
@@ -81,12 +82,40 @@ async def send_line_message(user_id: str, text: str) -> None:
             )
 
 
+async def send_line_image(user_id: str, image_url: str) -> None:
+    """LINEに画像メッセージを送信"""
+    configuration = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
+    async with AsyncApiClient(configuration) as api_client:
+        line_bot_api = AsyncMessagingApi(api_client)
+        await line_bot_api.push_message(
+            PushMessageRequest(
+                to=user_id,
+                messages=[
+                    ImageMessage(
+                        original_content_url=image_url,
+                        preview_image_url=image_url,
+                    )
+                ],
+            )
+        )
+
+
 def normalize_line_text(text: str) -> str:
     """LINE向けにテキスト整形（Markdownの*を抑止）"""
     # 箇条書きの先頭記号を統一
     text = re.sub(r"(?m)^\s*[\-\*]\s+", "・ ", text)
     # 太字・強調などで使われたアスタリスクを除去
     return text.replace("*", "")
+
+
+def extract_line_image_payload(text: str) -> tuple[str, str]:
+    """IMAGE_URL/CAPTION 形式の応答を抽出"""
+    image_match = re.search(r"(?im)^IMAGE_URL:\s*(https?://\S+)\s*$", text)
+    if not image_match:
+        return "", ""
+    caption_match = re.search(r"(?im)^CAPTION:\s*(.+)\s*$", text)
+    caption = caption_match.group(1).strip() if caption_match else "画像できたよ！"
+    return image_match.group(1).strip(), caption
 
 
 async def download_line_content(message_id: str) -> bytes:
@@ -108,7 +137,12 @@ async def process_text(user_id: str, text: str) -> None:
         await send_line_message(user_id, "考え中にゃ！")
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, ceo.process_text, text, user_id)
-        await send_line_message(user_id, response)
+        image_url, caption = extract_line_image_payload(response)
+        if image_url:
+            await send_line_image(user_id, image_url)
+            await send_line_message(user_id, caption)
+        else:
+            await send_line_message(user_id, response)
     except Exception as e:
         await send_line_message(user_id, f"❌ エラーが発生しました:\n{str(e)}")
 

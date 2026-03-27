@@ -12,7 +12,9 @@ LINE_AUTHORIZED_USER_ID = os.environ["LINE_AUTHORIZED_USER_ID"]
 
 # ── AI API ────────────────────────────────────────────────────
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
-OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+# 後方互換: 既存実装が参照している場合に備えて残す
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", GEMINI_API_KEY)
 
 # ── Google ────────────────────────────────────────────────────
 GOOGLE_TOKEN_JSON = os.environ.get("GOOGLE_TOKEN_JSON", "")
