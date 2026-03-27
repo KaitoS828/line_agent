@@ -186,6 +186,14 @@ async def check_meeting_prep_job(send_fn, services: dict, user_id: str):
         pass
 
 
+async def send_end_of_work_notification(send_fn, user_id: str):
+    """平日17:15の定時通知"""
+    try:
+        await send_fn(user_id, "おつかれー定時だよー🕔")
+    except Exception as e:
+        await send_fn(user_id, f"⚠️ 定時通知でエラーが発生しました:\n{str(e)}")
+
+
 async def summarize_conversations_job():
     """古い会話履歴を要約して圧縮"""
     if not SUPABASE_URL:
@@ -243,6 +251,16 @@ def create_scheduler(send_fn, services: dict, user_id: str) -> AsyncIOScheduler:
         args=[send_fn, services, user_id],
         id="meeting_prep_check",
         name="会議前リサーチチェック",
+        replace_existing=True,
+    )
+
+    # 平日17:15の定時通知
+    scheduler.add_job(
+        send_end_of_work_notification,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=15, timezone=JST),
+        args=[send_fn, user_id],
+        id="end_of_work",
+        name="定時通知",
         replace_existing=True,
     )
 
