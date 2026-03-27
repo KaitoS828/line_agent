@@ -31,13 +31,17 @@ AUTHORIZED_USER_ID = LINE_AUTHORIZED_USER_ID
 # ── CEO 初期化 ─────────────────────────────────────────────────
 from ceo import CEOAgent, get_google_creds
 from actions.calendar import CalendarActions
+from actions.gmail import GmailActions
 from scheduler import create_scheduler
 
 ceo = CEOAgent()
 
-# スケジューラー用のカレンダーアクション
+# スケジューラー用のサービス群
 _creds = get_google_creds()
-_calendar_for_scheduler = CalendarActions(_creds)
+_services = {
+    "calendar": CalendarActions(_creds),
+    "gmail": GmailActions(_creds),
+}
 
 
 # ── アプリ起動/停止 ────────────────────────────────────────────
@@ -45,9 +49,9 @@ _calendar_for_scheduler = CalendarActions(_creds)
 @asynccontextmanager
 async def lifespan(app):
     """起動時にスケジューラーを開始、停止時にシャットダウン"""
-    scheduler = create_scheduler(send_line_message, _calendar_for_scheduler, AUTHORIZED_USER_ID)
+    scheduler = create_scheduler(send_line_message, _services, AUTHORIZED_USER_ID)
     scheduler.start()
-    print("⏰ スケジューラー起動 — 朝の通知が有効です")
+    print("⏰ スケジューラー起動 — 能動的通知が有効です")
     yield
     scheduler.shutdown()
     print("⏰ スケジューラー停止")
@@ -91,7 +95,7 @@ async def process_text(user_id: str, text: str) -> None:
     try:
         await send_line_message(user_id, "⚙️ 処理中...")
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, ceo.process_text, text)
+        response = await loop.run_in_executor(None, ceo.process_text, text, user_id)
         await send_line_message(user_id, response)
     except Exception as e:
         await send_line_message(user_id, f"❌ エラーが発生しました:\n{str(e)}")

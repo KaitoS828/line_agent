@@ -11,8 +11,9 @@ import anthropic
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
-from config import ANTHROPIC_API_KEY, GOOGLE_TOKEN_JSON
+from config import ANTHROPIC_API_KEY, GOOGLE_TOKEN_JSON, SUPABASE_URL
 from agents import create_all_agents, get_agent_directory
+from actions.memory import save_message, get_conversation_context
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
@@ -98,15 +99,29 @@ class CEOAgent:
 
     # ── テキストメッセージ処理 ──────────────────────────────────
 
-    def process_text(self, user_message: str) -> str:
+    def process_text(self, user_message: str, user_id: str = "default") -> str:
         """テキストメッセージを処理 — 適切なエージェントに委譲"""
+        # 会話記憶: ユーザーメッセージを保存 & コンテキスト取得
+        if SUPABASE_URL:
+            try:
+                save_message(user_id, "user", user_message)
+                context = get_conversation_context(user_id)
+            except Exception:
+                context = ""
+        else:
+            context = ""
+
+        system = self.system_prompt
+        if context:
+            system += f"\n\n{context}"
+
         messages = [{"role": "user", "content": user_message}]
 
-        for _ in range(15):  # 複数エージェントへの連続委譲に対応
+        for _ in range(15):
             response = self.client.messages.create(
                 model="claude-sonnet-4-6",
                 max_tokens=4096,
-                system=self.system_prompt,
+                system=system,
                 tools=[DELEGATE_TOOL],
                 messages=messages,
             )
@@ -114,7 +129,14 @@ class CEOAgent:
             if response.stop_reason == "end_turn":
                 for block in response.content:
                     if hasattr(block, "text"):
-                        return block.text
+                        result = block.text
+                        # 会話記憶: 応答を保存
+                        if SUPABASE_URL:
+                            try:
+                                save_message(user_id, "assistant", result)
+                            except Exception:
+                                pass
+                        return result
                 return "✅ 完了しました。"
 
             if response.stop_reason == "tool_use":

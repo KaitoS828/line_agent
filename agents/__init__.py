@@ -10,6 +10,7 @@ from agents.sheets_mgr import SheetsMgrAgent
 from agents.web_searcher import WebSearcherAgent
 from agents.gmail_mgr import GmailMgrAgent
 from agents.task_mgr import TaskMgrAgent
+from agents.monitor_mgr import MonitorMgrAgent
 
 
 def create_all_agents(google_creds=None) -> dict:
@@ -25,6 +26,7 @@ def create_all_agents(google_creds=None) -> dict:
         "web_search": WebSearcherAgent(),
         "gmail": GmailMgrAgent(google_creds),
         "task": TaskMgrAgent(),
+        "monitor": MonitorMgrAgent(),
     }
 
 

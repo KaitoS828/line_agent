@@ -1,14 +1,62 @@
-"""毎日決まった時間にLINEへ通知を送るスケジューラー"""
+"""スケジューラー — 能動的通知の中枢"""
 
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 
-from config import MORNING_NOTIFY_HOUR, MORNING_NOTIFY_MINUTE, EVENING_NOTIFY_HOUR, EVENING_NOTIFY_MINUTE
+from config import (
+    MORNING_NOTIFY_HOUR, MORNING_NOTIFY_MINUTE,
+    EVENING_NOTIFY_HOUR, EVENING_NOTIFY_MINUTE,
+    SUPABASE_URL,
+)
 from actions.tasks import get_due_tasks
+from actions.weather import get_weather
 
 JST = timezone(timedelta(hours=9))
+
+
+# ── 天気 & メール取得ヘルパー ─────────────────────────────────
+
+
+def _get_weather_text() -> str:
+    """天気情報を安全に取得"""
+    try:
+        return get_weather()
+    except Exception:
+        return ""
+
+
+def _get_email_summary(gmail_actions) -> str:
+    """未読メールのサマリーを取得"""
+    if not gmail_actions:
+        return ""
+    try:
+        result = gmail_actions.service.users().messages().list(
+            userId="me", q="is:unread", maxResults=5
+        ).execute()
+        messages = result.get("messages", [])
+        total = result.get("resultSizeEstimate", 0)
+        if not messages:
+            return ""
+
+        lines = [f"📧 未読メール: {total}件"]
+        for msg_info in messages[:5]:
+            msg = gmail_actions.service.users().messages().get(
+                userId="me", id=msg_info["id"], format="metadata",
+                metadataHeaders=["Subject", "From"],
+            ).execute()
+            headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+            sender = headers.get("From", "不明").split("<")[0].strip()
+            subject = headers.get("Subject", "(件名なし)")
+            lines.append(f"  • {sender}: {subject}")
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
+# ── カレンダー予定取得 ─────────────────────────────────────────
 
 
 def _get_today_events(calendar_actions) -> str:
@@ -44,8 +92,16 @@ def _get_today_events(calendar_actions) -> str:
     return "\n".join(lines)
 
 
-def _build_morning_message(events_text: str | None, tasks_text: str | None) -> str:
-    """朝のダイジェストメッセージを組み立てる"""
+# ── メッセージ構築 ─────────────────────────────────────────────
+
+
+def _build_morning_message(
+    events_text: str | None,
+    tasks_text: str | None,
+    weather_text: str = "",
+    email_text: str = "",
+) -> str:
+    """朝のダイジェストメッセージ"""
     now = datetime.now(JST)
     date_str = now.strftime("%Y年%m月%d日(%a)")
     weekday_ja = {"Mon": "月", "Tue": "火", "Wed": "水", "Thu": "木", "Fri": "金", "Sat": "土", "Sun": "日"}
@@ -54,13 +110,17 @@ def _build_morning_message(events_text: str | None, tasks_text: str | None) -> s
 
     msg = f"☀️ おはようございます！\n📆 {date_str}\n"
 
-    # カレンダー予定
+    if weather_text:
+        msg += f"\n{weather_text}\n"
+
     if events_text:
         msg += f"\n📋 今日の予定:\n{events_text}"
     else:
         msg += "\n📋 今日の予定はありません"
 
-    # タスク期限通知
+    if email_text:
+        msg += f"\n\n{email_text}"
+
     if tasks_text:
         msg += f"\n\n{tasks_text}"
 
@@ -71,31 +131,31 @@ def _build_morning_message(events_text: str | None, tasks_text: str | None) -> s
 def _build_evening_message(tasks_text: str | None) -> str:
     """夜のリマインダーメッセージ"""
     msg = "🌙 お疲れさまでした！\n"
-
     if tasks_text:
         msg += f"\n{tasks_text}"
     else:
         msg += "\n✅ 期限が迫っているタスクはありません。ゆっくり休んでください！"
-
     return msg
 
 
 # ── ジョブ関数 ─────────────────────────────────────────────────
 
 
-async def send_morning_digest(send_fn, calendar_actions, user_id: str):
-    """朝のダイジェストを送信（カレンダー + タスク期限）"""
+async def send_morning_digest(send_fn, services: dict, user_id: str):
+    """朝のダイジェスト（カレンダー + タスク + 天気 + メール）"""
     try:
-        events_text = _get_today_events(calendar_actions)
+        events_text = _get_today_events(services["calendar"])
         tasks_text = get_due_tasks()
-        message = _build_morning_message(events_text, tasks_text)
+        weather_text = _get_weather_text()
+        email_text = _get_email_summary(services.get("gmail"))
+        message = _build_morning_message(events_text, tasks_text, weather_text, email_text)
         await send_fn(user_id, message)
     except Exception as e:
         await send_fn(user_id, f"⚠️ 朝の通知でエラーが発生しました:\n{str(e)}")
 
 
 async def send_evening_reminder(send_fn, user_id: str):
-    """夜のタスクリマインダーを送信"""
+    """夜のタスクリマインダー"""
     try:
         tasks_text = get_due_tasks()
         message = _build_evening_message(tasks_text)
@@ -104,18 +164,52 @@ async def send_evening_reminder(send_fn, user_id: str):
         await send_fn(user_id, f"⚠️ 夜の通知でエラーが発生しました:\n{str(e)}")
 
 
+async def check_monitors_job(send_fn, user_id: str):
+    """監視対象を定期チェック"""
+    try:
+        from actions.monitors import check_all_monitors
+        alerts = check_all_monitors()
+        for alert in alerts:
+            await send_fn(user_id, alert)
+    except Exception:
+        pass
+
+
+async def check_meeting_prep_job(send_fn, services: dict, user_id: str):
+    """会議前リサーチを自動実行"""
+    try:
+        from actions.meeting_prep import check_and_prepare
+        briefs = check_and_prepare(services["calendar"])
+        for brief in briefs:
+            await send_fn(user_id, brief)
+    except Exception:
+        pass
+
+
+async def summarize_conversations_job():
+    """古い会話履歴を要約して圧縮"""
+    if not SUPABASE_URL:
+        return
+    try:
+        from actions.memory import summarize_old_messages
+        from config import LINE_AUTHORIZED_USER_ID
+        summarize_old_messages(LINE_AUTHORIZED_USER_ID)
+    except Exception:
+        pass
+
+
 # ── スケジューラー作成 ─────────────────────────────────────────
 
 
-def create_scheduler(send_fn, calendar_actions, user_id: str) -> AsyncIOScheduler:
+def create_scheduler(send_fn, services: dict, user_id: str) -> AsyncIOScheduler:
     """スケジューラーを作成して返す"""
     scheduler = AsyncIOScheduler(timezone=JST)
 
-    # 毎朝のダイジェスト（カレンダー + タスク期限）
+    # 毎朝のダイジェスト
     scheduler.add_job(
         send_morning_digest,
         trigger=CronTrigger(hour=MORNING_NOTIFY_HOUR, minute=MORNING_NOTIFY_MINUTE, timezone=JST),
-        args=[send_fn, calendar_actions, user_id],
+        args=[send_fn, services, user_id],
         id="morning_digest",
         name="朝のダイジェスト通知",
         replace_existing=True,
@@ -130,5 +224,36 @@ def create_scheduler(send_fn, calendar_actions, user_id: str) -> AsyncIOSchedule
         name="夜のタスクリマインダー",
         replace_existing=True,
     )
+
+    # 監視チェック（30分間隔）
+    if SUPABASE_URL:
+        scheduler.add_job(
+            check_monitors_job,
+            trigger=IntervalTrigger(minutes=30),
+            args=[send_fn, user_id],
+            id="monitor_check",
+            name="監視チェック",
+            replace_existing=True,
+        )
+
+    # 会議前リサーチ（15分間隔）
+    scheduler.add_job(
+        check_meeting_prep_job,
+        trigger=IntervalTrigger(minutes=15),
+        args=[send_fn, services, user_id],
+        id="meeting_prep_check",
+        name="会議前リサーチチェック",
+        replace_existing=True,
+    )
+
+    # 会話履歴の要約（深夜3時）
+    if SUPABASE_URL:
+        scheduler.add_job(
+            summarize_conversations_job,
+            trigger=CronTrigger(hour=3, minute=0, timezone=JST),
+            id="conversation_summary",
+            name="会話履歴の要約",
+            replace_existing=True,
+        )
 
     return scheduler

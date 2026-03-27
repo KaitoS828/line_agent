@@ -17,8 +17,15 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 # ── Google ────────────────────────────────────────────────────
 GOOGLE_TOKEN_JSON = os.environ.get("GOOGLE_TOKEN_JSON", "")
 
+# ── Supabase ──────────────────────────────────────────────────
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
+
 # ── Web検索 ───────────────────────────────────────────────────
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+
+# ── 天気 ──────────────────────────────────────────────────────
+WEATHER_CITY = os.environ.get("WEATHER_CITY", "Tokyo")
 
 # ── スケジューラー（任意 — デフォルト値あり）─────────────────
 MORNING_NOTIFY_HOUR = int(os.environ.get("MORNING_NOTIFY_HOUR", "7"))
