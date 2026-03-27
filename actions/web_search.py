@@ -1,9 +1,7 @@
 """Web検索アクション — Tavily APIを使ったリアルタイムWeb検索"""
 
-import os
 import httpx
-
-TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+from config import TAVILY_API_KEY
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 
 

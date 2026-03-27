@@ -4,6 +4,7 @@ import tempfile
 
 import anthropic
 from openai import OpenAI
+from config import ANTHROPIC_API_KEY, OPENAI_API_KEY
 
 MEETING_MINUTES_PROMPT = """あなたは議事録作成の専門家です。
 音声から文字起こしされたテキストを元に、構造化された議事録を作成してください。
@@ -41,8 +42,8 @@ class TranscriberAgent:
     """Whisperで文字起こし → Claudeで議事録作成"""
 
     def __init__(self):
-        self.client = anthropic.Anthropic()
-        self.openai_client = OpenAI()
+        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        self.openai_client = OpenAI(api_key=OPENAI_API_KEY)
         self.name = "TranscriberAgent"
         self.role = "音声の文字起こし・議事録作成の専門家"
 

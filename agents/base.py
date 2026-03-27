@@ -1,13 +1,14 @@
 """全エージェント共通の基底クラス"""
 
 import anthropic
+from config import ANTHROPIC_API_KEY
 
 
 class BaseAgent:
     """専門エージェントの基底クラス。Claudeのツール使用ループを実装。"""
 
     def __init__(self, name: str, role: str, system_prompt: str, tools: list):
-        self.client = anthropic.Anthropic()
+        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         self.name = name
         self.role = role  # 1行の役職説明（CEOが参照）
         self.system_prompt = system_prompt

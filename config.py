@@ -1,0 +1,27 @@
+"""環境変数の一元管理 — すべての設定値をここで定義"""
+
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# ── LINE ──────────────────────────────────────────────────────
+LINE_CHANNEL_ACCESS_TOKEN = os.environ["LINE_CHANNEL_ACCESS_TOKEN"]
+LINE_CHANNEL_SECRET = os.environ["LINE_CHANNEL_SECRET"]
+LINE_AUTHORIZED_USER_ID = os.environ["LINE_AUTHORIZED_USER_ID"]
+
+# ── AI API ────────────────────────────────────────────────────
+ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+
+# ── Google ────────────────────────────────────────────────────
+GOOGLE_TOKEN_JSON = os.environ.get("GOOGLE_TOKEN_JSON", "")
+
+# ── Web検索 ───────────────────────────────────────────────────
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
+
+# ── スケジューラー（任意 — デフォルト値あり）─────────────────
+MORNING_NOTIFY_HOUR = int(os.environ.get("MORNING_NOTIFY_HOUR", "7"))
+MORNING_NOTIFY_MINUTE = int(os.environ.get("MORNING_NOTIFY_MINUTE", "0"))
+EVENING_NOTIFY_HOUR = int(os.environ.get("EVENING_NOTIFY_HOUR", "21"))
+EVENING_NOTIFY_MINUTE = int(os.environ.get("EVENING_NOTIFY_MINUTE", "0"))

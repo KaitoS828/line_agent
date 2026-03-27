@@ -1,20 +1,14 @@
 """毎日決まった時間にLINEへ通知を送るスケジューラー"""
 
-import os
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from config import MORNING_NOTIFY_HOUR, MORNING_NOTIFY_MINUTE, EVENING_NOTIFY_HOUR, EVENING_NOTIFY_MINUTE
 from actions.tasks import get_due_tasks
 
 JST = timezone(timedelta(hours=9))
-
-# 通知時刻（環境変数で変更可）
-MORNING_HOUR = int(os.environ.get("MORNING_NOTIFY_HOUR", "7"))
-MORNING_MINUTE = int(os.environ.get("MORNING_NOTIFY_MINUTE", "0"))
-EVENING_HOUR = int(os.environ.get("EVENING_NOTIFY_HOUR", "21"))
-EVENING_MINUTE = int(os.environ.get("EVENING_NOTIFY_MINUTE", "0"))
 
 
 def _get_today_events(calendar_actions) -> str:
@@ -120,7 +114,7 @@ def create_scheduler(send_fn, calendar_actions, user_id: str) -> AsyncIOSchedule
     # 毎朝のダイジェスト（カレンダー + タスク期限）
     scheduler.add_job(
         send_morning_digest,
-        trigger=CronTrigger(hour=MORNING_HOUR, minute=MORNING_MINUTE, timezone=JST),
+        trigger=CronTrigger(hour=MORNING_NOTIFY_HOUR, minute=MORNING_NOTIFY_MINUTE, timezone=JST),
         args=[send_fn, calendar_actions, user_id],
         id="morning_digest",
         name="朝のダイジェスト通知",
@@ -130,7 +124,7 @@ def create_scheduler(send_fn, calendar_actions, user_id: str) -> AsyncIOSchedule
     # 毎晩のタスクリマインダー
     scheduler.add_job(
         send_evening_reminder,
-        trigger=CronTrigger(hour=EVENING_HOUR, minute=EVENING_MINUTE, timezone=JST),
+        trigger=CronTrigger(hour=EVENING_NOTIFY_HOUR, minute=EVENING_NOTIFY_MINUTE, timezone=JST),
         args=[send_fn, user_id],
         id="evening_reminder",
         name="夜のタスクリマインダー",

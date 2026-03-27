@@ -5,13 +5,13 @@
 """
 
 import json
-import os
 from pathlib import Path
 
 import anthropic
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
+from config import ANTHROPIC_API_KEY, GOOGLE_TOKEN_JSON
 from agents import create_all_agents, get_agent_directory
 
 SCOPES = [
@@ -27,7 +27,7 @@ TOKEN_FILE = Path(__file__).parent / "token.json"
 
 def get_google_creds() -> Credentials:
     creds = None
-    token_json_str = os.environ.get("GOOGLE_TOKEN_JSON")
+    token_json_str = GOOGLE_TOKEN_JSON
     if token_json_str:
         creds = Credentials.from_authorized_user_info(json.loads(token_json_str), SCOPES)
     elif TOKEN_FILE.exists():
@@ -69,7 +69,7 @@ class CEOAgent:
     """LINE Agent の CEO — 全エージェントを統括"""
 
     def __init__(self):
-        self.client = anthropic.Anthropic()
+        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         self.creds = get_google_creds()
         self.agents = create_all_agents(self.creds)
         self.agent_directory = get_agent_directory(self.agents)

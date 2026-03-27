@@ -1,13 +1,14 @@
 """リサーチ担当エージェント — 情報収集・分析・質問回答"""
 
 import anthropic
+from config import ANTHROPIC_API_KEY
 
 
 class ResearcherAgent:
     """Claudeの知識を活用して調査・分析・質問回答を行う"""
 
     def __init__(self):
-        self.client = anthropic.Anthropic()
+        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         self.name = "ResearcherAgent"
         self.role = "リサーチ・情報分析・質問回答の専門家"
 

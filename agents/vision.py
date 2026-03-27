@@ -1,6 +1,7 @@
 """画像分析担当エージェント — Claude Visionによる画像認識"""
 
 import anthropic
+from config import ANTHROPIC_API_KEY
 
 IMAGE_ANALYSIS_PROMPT = """あなたはLINEで送られてきた画像を分析するAIアシスタントです。
 画像の内容を日本語で分かりやすく説明してください。
@@ -21,7 +22,7 @@ class VisionAgent:
     """Claude Visionで画像を分析"""
 
     def __init__(self):
-        self.client = anthropic.Anthropic()
+        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
         self.name = "VisionAgent"
         self.role = "画像分析・OCR・写真認識の専門家"
 
