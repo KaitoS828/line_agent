@@ -5,6 +5,7 @@
 """
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import anthropic
@@ -134,7 +135,15 @@ class CEOAgent:
         else:
             context = ""
 
-        system = self.system_prompt
+        # 現在の東京時刻を毎回動的に注入（API呼び出しなし・高速）
+        JST = timezone(timedelta(hours=9))
+        now_jst = datetime.now(JST)
+        current_time_str = now_jst.strftime("%Y年%m月%d日（%A）%H:%M JST")
+        # 曜日を日本語に変換
+        weekday_ja = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"]
+        current_time_str = now_jst.strftime("%Y年%m月%d日") + f"（{weekday_ja[now_jst.weekday()]}）" + now_jst.strftime("%H:%M JST")
+
+        system = self.system_prompt + f"\n\n## 現在の日時（必ずこれを基準に日付を解釈すること）\n{current_time_str}"
         if context:
             system += f"\n\n{context}"
 
