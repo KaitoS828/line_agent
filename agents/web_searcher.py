@@ -11,7 +11,7 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "検索クエリ"},
-                "max_results": {"type": "integer", "description": "最大結果数（デフォルト5）"},
+                "max_results": {"type": "integer", "description": "最大結果数（デフォルト3）"},
             },
             "required": ["query"],
         },
@@ -42,7 +42,10 @@ SYSTEM_PROMPT = """あなたはWeb検索の専門家です。
 - 日本語で簡潔に結果を報告する
 - 情報源（URL）を必ず含める
 - 複数のソースを比較して正確性を担保する
-- 検索結果が不十分な場合はクエリを変えて再検索する"""
+- 検索結果が不十分な場合はクエリを変えて再検索する
+- 検索は2段階で行う
+  1) 初回（深掘り指定がない）: web_searchは1回だけ実行し、短く要点を返す。最後に「必要なら深掘りして再検索する」と案内する
+  2) 深掘り依頼あり（例: もっと詳しく、深掘り、比較して）: 複数回のweb_searchと必要なget_page_contentを使って、根拠付きで詳しく返す"""
 
 
 class WebSearcherAgent(BaseAgent):
@@ -60,7 +63,7 @@ class WebSearcherAgent(BaseAgent):
                 case "web_search":
                     return web_search.search(
                         tool_input["query"],
-                        tool_input.get("max_results", 5),
+                        tool_input.get("max_results", 3),
                     )
                 case "get_page_content":
                     return web_search.get_page_content(tool_input["url"])

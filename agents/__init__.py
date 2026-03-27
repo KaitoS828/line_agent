@@ -14,6 +14,9 @@ from agents.monitor_mgr import MonitorMgrAgent
 from agents.url_reader import URLReaderAgent
 from agents.prompt_mode import PromptModeAgent
 from agents.stats import StatsAgent
+from agents.persona_mgr import PersonaMgrAgent
+from agents.report_writer import ReportWriterAgent
+from agents.github_mgr import GithubMgrAgent
 
 
 def create_all_agents(google_creds=None) -> dict:
@@ -33,6 +36,9 @@ def create_all_agents(google_creds=None) -> dict:
         "url_reader": URLReaderAgent(),
         "prompt_mode": PromptModeAgent(),
         "stats": StatsAgent(),
+        "persona_mgr": PersonaMgrAgent(),
+        "report_writer": ReportWriterAgent(),
+        "github_mgr": GithubMgrAgent(),
     }
 
 

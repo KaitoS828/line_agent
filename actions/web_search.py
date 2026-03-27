@@ -1,24 +1,55 @@
 """Web検索アクション — Tavily APIを使ったリアルタイムWeb検索"""
 
+import time
 import httpx
 from config import TAVILY_API_KEY
+
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
+TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"
+
+# 同一クエリ連打時の体感速度を上げるため、短時間キャッシュを使う
+_CACHE_TTL_SECONDS = 120
+_CACHE: dict[tuple[str, int], tuple[float, str]] = {}
+_PAGE_CACHE: dict[str, tuple[float, str]] = {}
+
+_CLIENT = httpx.Client(
+    timeout=httpx.Timeout(connect=5.0, read=12.0, write=8.0, pool=5.0),
+    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+    http2=True,
+)
 
 
-def search(query: str, max_results: int = 5) -> str:
+def _get_cached(cache: dict, key):
+    item = cache.get(key)
+    if not item:
+        return None
+    ts, value = item
+    if time.time() - ts > _CACHE_TTL_SECONDS:
+        cache.pop(key, None)
+        return None
+    return value
+
+
+def search(query: str, max_results: int = 3) -> str:
     """Tavilyでウェブ検索を実行"""
     if not TAVILY_API_KEY:
         return "❌ TAVILY_API_KEY が設定されていません"
 
-    resp = httpx.post(
+    cache_key = (query.strip(), max_results)
+    cached = _get_cached(_CACHE, cache_key)
+    if cached:
+        return cached
+
+    resp = _CLIENT.post(
         TAVILY_SEARCH_URL,
         json={
             "api_key": TAVILY_API_KEY,
             "query": query,
             "max_results": max_results,
-            "include_answer": True,
+            # 回答生成をオフにして検索速度優先
+            "include_answer": False,
+            "search_depth": "basic",
         },
-        timeout=30,
     )
     resp.raise_for_status()
     data = resp.json()
@@ -38,7 +69,9 @@ def search(query: str, max_results: int = 5) -> str:
             lines.append(f"   {snippet}...")
         lines.append("")
 
-    return "\n".join(lines) if lines else "検索結果が見つかりませんでした。"
+    result = "\n".join(lines) if lines else "検索結果が見つかりませんでした。"
+    _CACHE[cache_key] = (time.time(), result)
+    return result
 
 
 def get_page_content(url: str) -> str:
@@ -46,13 +79,17 @@ def get_page_content(url: str) -> str:
     if not TAVILY_API_KEY:
         return "❌ TAVILY_API_KEY が設定されていません"
 
-    resp = httpx.post(
-        "https://api.tavily.com/extract",
+    normalized_url = url.strip()
+    cached = _get_cached(_PAGE_CACHE, normalized_url)
+    if cached:
+        return cached
+
+    resp = _CLIENT.post(
+        TAVILY_EXTRACT_URL,
         json={
             "api_key": TAVILY_API_KEY,
-            "urls": [url],
+            "urls": [normalized_url],
         },
-        timeout=30,
     )
     resp.raise_for_status()
     data = resp.json()
@@ -60,5 +97,7 @@ def get_page_content(url: str) -> str:
     results = data.get("results", [])
     if results:
         content = results[0].get("raw_content", "")[:3000]
-        return content if content else "ページ内容を取得できませんでした。"
+        result = content if content else "ページ内容を取得できませんでした。"
+        _PAGE_CACHE[normalized_url] = (time.time(), result)
+        return result
     return "ページ内容を取得できませんでした。"
