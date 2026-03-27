@@ -134,7 +134,7 @@ async def process_text(user_id: str, text: str) -> None:
     """テキスト → CEOが判断して適切なエージェントに委譲"""
     try:
         log_request("text")
-        await send_line_message(user_id, "考え中にゃ！")
+        await send_line_message(user_id, "ちょっと待ってねー！")
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, ceo.process_text, text, user_id)
         image_url, caption = extract_line_image_payload(response)
