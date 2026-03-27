@@ -1,6 +1,7 @@
 """レポート生成アクション — Web調査 → レポート作成 → Google Docs → PDF"""
 
 import io
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import anthropic
 from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
@@ -143,3 +144,33 @@ def create_report_pipeline(drive_service, topic: str, folder_id: str = None) -> 
         f"📄 Google Docs:\n{doc.get('webViewLink', 'N/A')}\n\n"
         f"📑 PDF:\n{pdf_file.get('webViewLink', 'N/A')}"
     )
+
+
+def create_multi_report_pipeline(
+    drive_service,
+    topics: list[str],
+    folder_id: str = None,
+    max_workers: int = 3,
+) -> str:
+    """複数トピックを並列でレポート化してURL一覧を返す"""
+    normalized_topics = [t.strip() for t in topics if t and t.strip()]
+    if not normalized_topics:
+        return "❌ トピックが空です"
+
+    lines = [f"🧾 複数レポート作成を開始（{len(normalized_topics)}件）"]
+    workers = max(1, min(max_workers, 5))
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {
+            executor.submit(create_report_pipeline, drive_service, topic, folder_id): topic
+            for topic in normalized_topics
+        }
+        for future in as_completed(futures):
+            topic = futures[future]
+            try:
+                result = future.result()
+                lines.append(f"\n=== {topic} ===\n{result}")
+            except Exception as e:
+                lines.append(f"\n=== {topic} ===\n❌ 処理失敗: {e}")
+
+    return "\n".join(lines)

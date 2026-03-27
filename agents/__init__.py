@@ -1,5 +1,7 @@
 """エージェント社員名簿 — 全専門エージェントの登録・初期化"""
 
+from googleapiclient.discovery import build
+
 from agents.coder import CoderAgent
 from agents.researcher import ResearcherAgent
 from agents.transcriber import TranscriberAgent
@@ -21,6 +23,7 @@ from agents.github_mgr import GithubMgrAgent
 
 def create_all_agents(google_creds=None) -> dict:
     """全エージェントを初期化して辞書で返す"""
+    drive_service = build("drive", "v3", credentials=google_creds) if google_creds else None
     return {
         "coder": CoderAgent(),
         "researcher": ResearcherAgent(),
@@ -37,7 +40,7 @@ def create_all_agents(google_creds=None) -> dict:
         "prompt_mode": PromptModeAgent(),
         "stats": StatsAgent(),
         "persona_mgr": PersonaMgrAgent(),
-        "report_writer": ReportWriterAgent(),
+        "report_writer": ReportWriterAgent(drive_service=drive_service),
         "github_mgr": GithubMgrAgent(),
     }
 
