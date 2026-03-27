@@ -11,6 +11,9 @@ from agents.web_searcher import WebSearcherAgent
 from agents.gmail_mgr import GmailMgrAgent
 from agents.task_mgr import TaskMgrAgent
 from agents.monitor_mgr import MonitorMgrAgent
+from agents.url_reader import URLReaderAgent
+from agents.prompt_mode import PromptModeAgent
+from agents.stats import StatsAgent
 
 
 def create_all_agents(google_creds=None) -> dict:
@@ -27,6 +30,9 @@ def create_all_agents(google_creds=None) -> dict:
         "gmail": GmailMgrAgent(google_creds),
         "task": TaskMgrAgent(),
         "monitor": MonitorMgrAgent(),
+        "url_reader": URLReaderAgent(),
+        "prompt_mode": PromptModeAgent(),
+        "stats": StatsAgent(),
     }
 
 

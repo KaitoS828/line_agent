@@ -75,10 +75,18 @@ class CEOAgent:
         self.agents = create_all_agents(self.creds)
         self.agent_directory = get_agent_directory(self.agents)
 
+        # 性格ファイル読み込み
+        personality_file = Path(__file__).parent / "personality.md"
+        self.personality = personality_file.read_text(encoding="utf-8") if personality_file.exists() else ""
+        personality = self.personality
+
         # CEOのシステムプロンプト
-        self.system_prompt = f"""あなたはLINE AIアシスタントの CEO（最高経営責任者）です。
+        self.system_prompt = f"""あなたはLINE AIアシスタントです。
 ユーザーからのメッセージを受け取り、適切な専門エージェント（社員）にタスクを委譲し、
 結果をレビューしてユーザーにわかりやすく報告します。
+
+## あなたのキャラクター設定（最重要：必ずこのキャラとして振る舞うこと）
+{personality}
 
 ## あなたの社員一覧
 {self.agent_directory}
@@ -88,14 +96,22 @@ class CEOAgent:
 2. 最適な社員（エージェント）を選んでタスクを委譲する
 3. 1つのリクエストで複数の社員への委譲が可能（順番に実行）
 4. 社員からの報告を確認し、必要に応じて追加指示を出す
-5. 最終結果をユーザーに日本語で簡潔にまとめて報告する
+5. 最終結果をキャラクター設定に従った口調で、日本語で簡潔にまとめて報告する
 
 ## ルール
 - 自分で直接作業はしない。必ず社員に委譲する
 - 簡単な挨拶や雑談には、委譲せずに直接答えてもよい
 - 社員からのエラー報告は、わかりやすくユーザーに伝える
 - 複数の社員が必要な場合は、適切な順番で委譲する
-- 報告は簡潔に。余計な前置きは不要"""
+- 報告は簡潔に。余計な前置きは不要
+
+## 口調・フォーマットの絶対ルール（最優先）
+- どんな場面でも、必ずキャラクター設定の口調・性格で応答する
+- マークダウンの見出し（#）は使わない。LINEのチャットなので不自然
+- 箇条書きは「・」や「→」を使う。「-」「*」のマークダウン記法は使わない
+- 「〜できます」「〜いたします」「〜ございます」のような敬語は絶対に使わない
+- 機能説明を聞かれても、かんべのキャラで砕けた口調で答える
+- 回答はLINEのチャットとして自然な長さにする。長い一覧表は作らない"""
 
     # ── テキストメッセージ処理 ──────────────────────────────────
 
@@ -168,7 +184,7 @@ class CEOAgent:
         response = self.client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2048,
-            system="あなたはCEOです。画像分析担当からの報告をユーザーにわかりやすく伝えてください。報告内容が十分であればそのまま伝え、補足が必要なら追加してください。簡潔に。",
+            system=f"あなたはAIアシスタントです。画像分析担当からの報告をユーザーにわかりやすく伝えてください。報告内容が十分であればそのまま伝え、補足が必要なら追加してください。簡潔に。\n\n## キャラクター設定（必ずこの口調で応答）\n{self.personality}",
             messages=[
                 {
                     "role": "user",
@@ -194,7 +210,7 @@ class CEOAgent:
         response = self.client.messages.create(
             model="claude-sonnet-4-6",
             max_tokens=2048,
-            system="あなたはCEOです。文字起こし担当からの報告をユーザーにわかりやすく伝えてください。議事録のフォーマットが適切であればそのまま伝えてください。簡潔に。",
+            system=f"あなたはAIアシスタントです。文字起こし担当からの報告をユーザーにわかりやすく伝えてください。議事録のフォーマットが適切であればそのまま伝えてください。簡潔に。\n\n## キャラクター設定（必ずこの口調で応答）\n{self.personality}",
             messages=[
                 {
                     "role": "user",

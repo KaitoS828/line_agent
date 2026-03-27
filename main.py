@@ -25,6 +25,7 @@ from linebot.v3.messaging import (
 )
 
 from config import LINE_CHANNEL_ACCESS_TOKEN, LINE_CHANNEL_SECRET, LINE_AUTHORIZED_USER_ID
+from actions.activity_log import log_request
 
 AUTHORIZED_USER_ID = LINE_AUTHORIZED_USER_ID
 
@@ -93,6 +94,7 @@ async def download_line_content(message_id: str) -> bytes:
 async def process_text(user_id: str, text: str) -> None:
     """テキスト → CEOが判断して適切なエージェントに委譲"""
     try:
+        log_request("text")
         await send_line_message(user_id, "⚙️ 処理中...")
         loop = asyncio.get_event_loop()
         response = await loop.run_in_executor(None, ceo.process_text, text, user_id)
@@ -104,6 +106,7 @@ async def process_text(user_id: str, text: str) -> None:
 async def process_image(user_id: str, message_id: str) -> None:
     """画像 → CEOがVisionAgentに委譲"""
     try:
+        log_request("image")
         await send_line_message(user_id, "🖼️ 画像を分析中...")
         image_data = await download_line_content(message_id)
         image_b64 = base64.b64encode(image_data).decode("utf-8")
@@ -117,6 +120,7 @@ async def process_image(user_id: str, message_id: str) -> None:
 async def process_audio(user_id: str, message_id: str) -> None:
     """音声 → CEOがTranscriberAgentに委譲"""
     try:
+        log_request("audio")
         await send_line_message(user_id, "🎙️ 音声を文字起こし中...")
         audio_data = await download_line_content(message_id)
         loop = asyncio.get_event_loop()
