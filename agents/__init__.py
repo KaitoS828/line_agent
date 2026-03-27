@@ -7,6 +7,9 @@ from agents.vision import VisionAgent
 from agents.calendar_mgr import CalendarMgrAgent
 from agents.drive_mgr import DriveMgrAgent
 from agents.sheets_mgr import SheetsMgrAgent
+from agents.web_searcher import WebSearcherAgent
+from agents.gmail_mgr import GmailMgrAgent
+from agents.task_mgr import TaskMgrAgent
 
 
 def create_all_agents(google_creds=None) -> dict:
@@ -19,6 +22,9 @@ def create_all_agents(google_creds=None) -> dict:
         "calendar": CalendarMgrAgent(google_creds),
         "drive": DriveMgrAgent(google_creds),
         "sheets": SheetsMgrAgent(google_creds),
+        "web_search": WebSearcherAgent(),
+        "gmail": GmailMgrAgent(google_creds),
+        "task": TaskMgrAgent(),
     }
 
 

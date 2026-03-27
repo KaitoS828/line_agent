@@ -1,17 +1,20 @@
 """毎日決まった時間にLINEへ通知を送るスケジューラー"""
 
-import asyncio
 import os
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
+from actions.tasks import get_due_tasks
+
 JST = timezone(timedelta(hours=9))
 
-# 通知時刻（環境変数で変更可。デフォルト 07:00 JST）
+# 通知時刻（環境変数で変更可）
 MORNING_HOUR = int(os.environ.get("MORNING_NOTIFY_HOUR", "7"))
 MORNING_MINUTE = int(os.environ.get("MORNING_NOTIFY_MINUTE", "0"))
+EVENING_HOUR = int(os.environ.get("EVENING_NOTIFY_HOUR", "21"))
+EVENING_MINUTE = int(os.environ.get("EVENING_NOTIFY_MINUTE", "0"))
 
 
 def _get_today_events(calendar_actions) -> str:
@@ -38,7 +41,6 @@ def _get_today_events(calendar_actions) -> str:
     lines = []
     for e in events:
         start_raw = e["start"].get("dateTime", e["start"].get("date", ""))
-        # 時刻を見やすくフォーマット
         try:
             dt = datetime.fromisoformat(start_raw)
             time_str = dt.strftime("%H:%M")
@@ -48,8 +50,8 @@ def _get_today_events(calendar_actions) -> str:
     return "\n".join(lines)
 
 
-def _build_morning_message(events_text: str | None) -> str:
-    """朝の挨拶メッセージを組み立てる"""
+def _build_morning_message(events_text: str | None, tasks_text: str | None) -> str:
+    """朝のダイジェストメッセージを組み立てる"""
     now = datetime.now(JST)
     date_str = now.strftime("%Y年%m月%d日(%a)")
     weekday_ja = {"Mon": "月", "Tue": "火", "Wed": "水", "Thu": "木", "Fri": "金", "Sat": "土", "Sun": "日"}
@@ -58,36 +60,80 @@ def _build_morning_message(events_text: str | None) -> str:
 
     msg = f"☀️ おはようございます！\n📆 {date_str}\n"
 
+    # カレンダー予定
     if events_text:
         msg += f"\n📋 今日の予定:\n{events_text}"
     else:
-        msg += "\n📋 今日の予定はありません。自由な一日ですね！"
+        msg += "\n📋 今日の予定はありません"
+
+    # タスク期限通知
+    if tasks_text:
+        msg += f"\n\n{tasks_text}"
 
     msg += "\n\n今日も良い一日を！💪"
     return msg
 
 
+def _build_evening_message(tasks_text: str | None) -> str:
+    """夜のリマインダーメッセージ"""
+    msg = "🌙 お疲れさまでした！\n"
+
+    if tasks_text:
+        msg += f"\n{tasks_text}"
+    else:
+        msg += "\n✅ 期限が迫っているタスクはありません。ゆっくり休んでください！"
+
+    return msg
+
+
+# ── ジョブ関数 ─────────────────────────────────────────────────
+
+
 async def send_morning_digest(send_fn, calendar_actions, user_id: str):
-    """朝のダイジェストを送信"""
+    """朝のダイジェストを送信（カレンダー + タスク期限）"""
     try:
         events_text = _get_today_events(calendar_actions)
-        message = _build_morning_message(events_text)
+        tasks_text = get_due_tasks()
+        message = _build_morning_message(events_text, tasks_text)
         await send_fn(user_id, message)
     except Exception as e:
         await send_fn(user_id, f"⚠️ 朝の通知でエラーが発生しました:\n{str(e)}")
+
+
+async def send_evening_reminder(send_fn, user_id: str):
+    """夜のタスクリマインダーを送信"""
+    try:
+        tasks_text = get_due_tasks()
+        message = _build_evening_message(tasks_text)
+        await send_fn(user_id, message)
+    except Exception as e:
+        await send_fn(user_id, f"⚠️ 夜の通知でエラーが発生しました:\n{str(e)}")
+
+
+# ── スケジューラー作成 ─────────────────────────────────────────
 
 
 def create_scheduler(send_fn, calendar_actions, user_id: str) -> AsyncIOScheduler:
     """スケジューラーを作成して返す"""
     scheduler = AsyncIOScheduler(timezone=JST)
 
-    # 毎朝の通知
+    # 毎朝のダイジェスト（カレンダー + タスク期限）
     scheduler.add_job(
         send_morning_digest,
         trigger=CronTrigger(hour=MORNING_HOUR, minute=MORNING_MINUTE, timezone=JST),
         args=[send_fn, calendar_actions, user_id],
         id="morning_digest",
         name="朝のダイジェスト通知",
+        replace_existing=True,
+    )
+
+    # 毎晩のタスクリマインダー
+    scheduler.add_job(
+        send_evening_reminder,
+        trigger=CronTrigger(hour=EVENING_HOUR, minute=EVENING_MINUTE, timezone=JST),
+        args=[send_fn, user_id],
+        id="evening_reminder",
+        name="夜のタスクリマインダー",
         replace_existing=True,
     )
 
