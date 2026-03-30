@@ -13,7 +13,7 @@ from config import (
 )
 from actions.tasks import get_due_tasks
 from actions.weather import get_weather
-from actions.web_search import search
+from actions.ai_news import fetch_ai_news_digest
 
 JST = timezone(timedelta(hours=9))
 
@@ -30,22 +30,9 @@ def _get_weather_text() -> str:
 
 
 def _get_ai_news() -> str:
-    """最新AIニュースをWeb検索で取得してフォーマット"""
+    """最新AIニュースを記事取得 → Claude要約で届ける"""
     try:
-        raw = search("AI 最新ニュース 生成AI LLM", max_results=4)
-        if not raw or "設定されていません" in raw:
-            return ""
-
-        lines = ["🤖 今日のAIニュース"]
-        for line in raw.splitlines():
-            line = line.strip()
-            # 番号付き見出し行
-            if line and line[0].isdigit() and ". " in line:
-                lines.append(line)
-            # URL行
-            elif line.startswith("http"):
-                lines.append(f"  {line}")
-        return "\n".join(lines) if len(lines) > 1 else ""
+        return fetch_ai_news_digest()
     except Exception:
         return ""
 
