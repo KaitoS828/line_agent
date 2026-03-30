@@ -20,7 +20,6 @@ from agents.persona_mgr import PersonaMgrAgent
 from agents.report_writer import ReportWriterAgent
 from agents.github_mgr import GithubMgrAgent
 from agents.image_creator import ImageCreatorAgent
-from agents.threads_poster import ThreadsPosterAgent
 
 
 def create_all_agents(google_creds=None) -> dict:
@@ -45,7 +44,6 @@ def create_all_agents(google_creds=None) -> dict:
         "report_writer": ReportWriterAgent(drive_service=drive_service),
         "github_mgr": GithubMgrAgent(),
         "image_creator": ImageCreatorAgent(),
-        "threads": ThreadsPosterAgent(),
     }
 
 

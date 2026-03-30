@@ -27,10 +27,6 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 EXA_API_KEY = os.environ.get("EXA_API_KEY", "")
 
-# ── Threads ───────────────────────────────────────────────────
-THREADS_USER_ID = os.environ.get("THREADS_USER_ID", "")
-THREADS_ACCESS_TOKEN = os.environ.get("THREADS_ACCESS_TOKEN", "")
-
 # ── 天気 ──────────────────────────────────────────────────────
 WEATHER_CITY = os.environ.get("WEATHER_CITY", "Tokyo")
 
