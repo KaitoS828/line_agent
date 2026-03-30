@@ -13,6 +13,7 @@ from config import (
 )
 from actions.tasks import get_due_tasks
 from actions.weather import get_weather
+from actions.web_search import search
 
 JST = timezone(timedelta(hours=9))
 
@@ -24,6 +25,27 @@ def _get_weather_text() -> str:
     """天気情報を安全に取得"""
     try:
         return get_weather()
+    except Exception:
+        return ""
+
+
+def _get_ai_news() -> str:
+    """最新AIニュースをWeb検索で取得してフォーマット"""
+    try:
+        raw = search("AI 最新ニュース 生成AI LLM", max_results=4)
+        if not raw or "設定されていません" in raw:
+            return ""
+
+        lines = ["🤖 今日のAIニュース"]
+        for line in raw.splitlines():
+            line = line.strip()
+            # 番号付き見出し行
+            if line and line[0].isdigit() and ". " in line:
+                lines.append(line)
+            # URL行
+            elif line.startswith("http"):
+                lines.append(f"  {line}")
+        return "\n".join(lines) if len(lines) > 1 else ""
     except Exception:
         return ""
 
@@ -99,6 +121,7 @@ def _build_morning_message(
     events_text: str | None,
     tasks_text: str | None,
     weather_text: str = "",
+    ai_news_text: str = "",
 ) -> str:
     """朝のダイジェストメッセージ"""
     now = datetime.now(JST)
@@ -118,6 +141,9 @@ def _build_morning_message(
     if tasks_text:
         msg += f"\n\n{tasks_text}"
 
+    if ai_news_text:
+        msg += f"\n\n{ai_news_text}"
+
     msg += "\n\n今日もいってらっしゃい！"
     return msg
 
@@ -136,12 +162,14 @@ def _build_evening_message(tasks_text: str | None) -> str:
 
 
 async def send_morning_digest(send_fn, services: dict, user_id: str):
-    """朝のダイジェスト（カレンダー + タスク + 天気）"""
+    """朝のダイジェスト（カレンダー + タスク + 天気 + AIニュース）"""
     try:
+        loop = asyncio.get_event_loop()
         events_text = _get_today_events(services["calendar"])
         tasks_text = get_due_tasks()
         weather_text = _get_weather_text()
-        message = _build_morning_message(events_text, tasks_text, weather_text)
+        ai_news_text = await loop.run_in_executor(None, _get_ai_news)
+        message = _build_morning_message(events_text, tasks_text, weather_text, ai_news_text)
         await send_fn(user_id, message)
     except Exception as e:
         await send_fn(user_id, f"朝の通知でエラーが出たわ:\n{str(e)}")
