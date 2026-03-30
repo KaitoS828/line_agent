@@ -1,8 +1,8 @@
-"""Web検索アクション — Tavily APIを使ったリアルタイムWeb検索"""
+"""Web検索アクション — Tavily API（プライマリ）/ Exa API（フォールバック）"""
 
 import time
 import httpx
-from config import TAVILY_API_KEY
+from config import TAVILY_API_KEY, EXA_API_KEY
 
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
 TAVILY_EXTRACT_URL = "https://api.tavily.com/extract"
@@ -30,10 +30,38 @@ def _get_cached(cache: dict, key):
     return value
 
 
+def _exa_search(query: str, max_results: int = 3) -> str:
+    """Exa APIでウェブ検索（Tavilyが使えない場合のフォールバック）"""
+    resp = _CLIENT.post(
+        "https://api.exa.ai/search",
+        headers={"x-api-key": EXA_API_KEY, "Content-Type": "application/json"},
+        json={"query": query, "numResults": max_results, "type": "neural"},
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    lines = []
+    for i, r in enumerate(data.get("results", []), 1):
+        lines.append(f"{i}. {r.get('title', '(タイトルなし)')}")
+        lines.append(f"   {r.get('url', '')}")
+        if r.get("text"):
+            lines.append(f"   {r['text'][:200]}...")
+        lines.append("")
+    return "\n".join(lines) if lines else "検索結果が見つかりませんでした。"
+
+
 def search(query: str, max_results: int = 3) -> str:
-    """Tavilyでウェブ検索を実行"""
-    if not TAVILY_API_KEY:
-        return "❌ TAVILY_API_KEY が設定されていません"
+    """ウェブ検索を実行（Tavily優先、なければExa）"""
+    if not TAVILY_API_KEY and not EXA_API_KEY:
+        return "❌ TAVILY_API_KEY または EXA_API_KEY が設定されていません"
+
+    if not TAVILY_API_KEY and EXA_API_KEY:
+        cache_key = (query.strip(), max_results)
+        cached = _get_cached(_CACHE, cache_key)
+        if cached:
+            return cached
+        result = _exa_search(query, max_results)
+        _CACHE[cache_key] = (time.time(), result)
+        return result
 
     cache_key = (query.strip(), max_results)
     cached = _get_cached(_CACHE, cache_key)
@@ -75,29 +103,31 @@ def search(query: str, max_results: int = 3) -> str:
 
 
 def get_page_content(url: str) -> str:
-    """指定URLのページ内容を取得（Tavily Extract）"""
-    if not TAVILY_API_KEY:
-        return "❌ TAVILY_API_KEY が設定されていません"
-
+    """指定URLのページ内容を取得（Tavily Extract → Jina Readerフォールバック）"""
     normalized_url = url.strip()
     cached = _get_cached(_PAGE_CACHE, normalized_url)
     if cached:
         return cached
 
-    resp = _CLIENT.post(
-        TAVILY_EXTRACT_URL,
-        json={
-            "api_key": TAVILY_API_KEY,
-            "urls": [normalized_url],
-        },
-    )
-    resp.raise_for_status()
-    data = resp.json()
+    # Tavilyが使える場合はそちらを優先
+    if TAVILY_API_KEY:
+        try:
+            resp = _CLIENT.post(
+                TAVILY_EXTRACT_URL,
+                json={"api_key": TAVILY_API_KEY, "urls": [normalized_url]},
+            )
+            resp.raise_for_status()
+            results = resp.json().get("results", [])
+            if results:
+                content = results[0].get("raw_content", "")[:4000]
+                if content:
+                    _PAGE_CACHE[normalized_url] = (time.time(), content)
+                    return content
+        except Exception:
+            pass
 
-    results = data.get("results", [])
-    if results:
-        content = results[0].get("raw_content", "")[:3000]
-        result = content if content else "ページ内容を取得できませんでした。"
-        _PAGE_CACHE[normalized_url] = (time.time(), result)
-        return result
-    return "ページ内容を取得できませんでした。"
+    # Jina Readerフォールバック（無料・APIキー不要）
+    from actions.url_extract import fetch_page_content
+    result = fetch_page_content(normalized_url)
+    _PAGE_CACHE[normalized_url] = (time.time(), result)
+    return result

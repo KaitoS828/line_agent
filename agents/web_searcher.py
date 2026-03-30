@@ -1,6 +1,6 @@
-"""Web検索担当エージェント — リアルタイムのウェブ検索・情報収集"""
+"""Web検索担当エージェント — ウェブ検索・YouTube・Twitter情報収集"""
 
-from actions import web_search
+from actions import web_search, youtube, twitter
 from agents.base import BaseAgent
 
 TOOLS = [
@@ -18,7 +18,7 @@ TOOLS = [
     },
     {
         "name": "get_page_content",
-        "description": "指定URLのページ内容を取得する",
+        "description": "指定URLのページ内容を取得する（Jina Reader使用）",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -27,32 +27,56 @@ TOOLS = [
             "required": ["url"],
         },
     },
+    {
+        "name": "youtube_transcript",
+        "description": "YouTube動画の字幕・トランスクリプトを取得して要約する",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "YouTube動画のURL"},
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "twitter_search",
+        "description": "Twitter/Xでツイートを検索する",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "検索クエリ"},
+                "max_results": {"type": "integer", "description": "最大件数（デフォルト10）"},
+            },
+            "required": ["query"],
+        },
+    },
 ]
 
 SYSTEM_PROMPT = """あなたはWeb検索の専門家です。
-リアルタイムのウェブ検索を使って、最新の情報を収集・分析します。
+ウェブ検索・YouTube字幕取得・Twitter検索を使って最新情報を収集・分析します。
 
 ## 得意分野
 - 最新ニュース・トレンドの検索
 - 技術情報・ドキュメントの検索
-- 価格・レビュー・比較情報の検索
+- YouTube動画の内容把握（字幕から要約）
+- Twitter/Xのトレンドや反応の収集
 - 特定のページ内容の取得・要約
 
 ## ルール
 - 日本語で簡潔に結果を報告する
 - 情報源（URL）を必ず含める
-- 複数のソースを比較して正確性を担保する
-- 検索結果が不十分な場合はクエリを変えて再検索する
+- YouTubeのURLが来たらyoutube_transcriptを使う
+- Twitter/Xの検索依頼はtwitter_searchを使う
 - 検索は2段階で行う
-  1) 初回（深掘り指定がない）: web_searchは1回だけ実行し、短く要点を返す。最後に「必要なら深掘りして再検索する」と案内する
-  2) 深掘り依頼あり（例: もっと詳しく、深掘り、比較して）: 複数回のweb_searchと必要なget_page_contentを使って、根拠付きで詳しく返す"""
+  1) 初回: 1回だけ検索して要点を短く返す
+  2) 深掘り依頼時: 複数検索・ページ取得を組み合わせて詳しく返す"""
 
 
 class WebSearcherAgent(BaseAgent):
     def __init__(self):
         super().__init__(
             name="WebSearcherAgent",
-            role="リアルタイムWeb検索・最新情報収集の専門家",
+            role="リアルタイムWeb検索・YouTube字幕取得・Twitter検索の専門家",
             system_prompt=SYSTEM_PROMPT,
             tools=TOOLS,
         )
@@ -67,6 +91,15 @@ class WebSearcherAgent(BaseAgent):
                     )
                 case "get_page_content":
                     return web_search.get_page_content(tool_input["url"])
+                case "youtube_transcript":
+                    info = youtube.get_video_info(tool_input["url"])
+                    transcript = youtube.get_transcript(tool_input["url"])
+                    return f"[動画情報]\n{info}\n\n[字幕]\n{transcript}"
+                case "twitter_search":
+                    return twitter.search_tweets(
+                        tool_input["query"],
+                        tool_input.get("max_results", 10),
+                    )
                 case _:
                     return f"❌ 未知のツール: {tool_name}"
         except Exception as e:
