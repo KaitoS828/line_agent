@@ -94,6 +94,7 @@ class CEOAgent:
 - 複数社員への連続委譲OK。image_creatorのIMAGE_URL形式はそのまま返す
 - Web検索: 初回は1回だけ。「深掘りして」なら複数検索
 - レポート系はreport_writer、画像生成はimage_creatorへ
+- タスク指示は必要最小限に。「何をすべきか」だけ伝える。背景説明・文脈の再説明は不要
 
 【出力ルール（最優先）】
 - 必ずキャラ設定の口調で返答
@@ -225,10 +226,37 @@ class CEOAgent:
 
     # ── 内部メソッド ───────────────────────────────────────────
 
+    # 要約を省略するエージェント（画像URLなど構造データを返すもの）
+    _NO_SUMMARIZE = {"image_creator", "report_writer"}
+    # 要約を発動する文字数しきい値
+    _SUMMARIZE_THRESHOLD = 2000
+
     def _delegate(self, agent_name: str, task: str) -> str:
-        """社員にタスクを委譲して結果を受け取る"""
+        """社員にタスクを委譲して結果を受け取る。長い返答は要約して渡す"""
         agent = self.agents.get(agent_name)
         if not agent:
             available = ", ".join(self.agents.keys())
             return f"❌ 「{agent_name}」という社員は存在しません。利用可能: {available}"
-        return agent.run(task)
+
+        result = agent.run(task)
+
+        # 短い・要約不要なエージェントはそのまま返す
+        if len(result) <= self._SUMMARIZE_THRESHOLD or agent_name in self._NO_SUMMARIZE:
+            return result
+
+        # 長い返答をHaikuで要約してからCEOに渡す
+        try:
+            summary_response = self.client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=600,
+                messages=[{"role": "user", "content":
+                    f"以下の報告を300文字以内で要点だけ箇条書きにしてください。重要な数値・URL・固有名詞は残すこと。\n\n{result[:6000]}"}],
+            )
+            for block in summary_response.content:
+                if hasattr(block, "text"):
+                    return block.text
+        except Exception:
+            pass
+
+        # 要約失敗時は先頭2000文字で切る
+        return result[:self._SUMMARIZE_THRESHOLD] + "…（以下省略）"
