@@ -32,18 +32,34 @@ def get_recent_messages(user_id: str, limit: int = 20) -> list[dict]:
 
 
 def get_conversation_context(user_id: str) -> str:
-    """CEOのsystem promptに注入する会話コンテキストを生成"""
-    messages = get_recent_messages(user_id, limit=15)
-    if not messages:
-        return ""
+    """CEOのsystem promptに注入する会話コンテキストを生成（要約＋直近10件）"""
+    db = get_db()
 
-    lines = ["## 最近の会話履歴（参考にしてください）"]
-    for msg in messages:
-        prefix = "ユーザー" if msg["role"] == "user" else "あなた"
-        content = msg["content"][:300]
-        lines.append(f"- {prefix}: {content}")
+    # 最新の要約を取得
+    summary_result = db.table("conversations") \
+        .select("content") \
+        .eq("user_id", user_id) \
+        .eq("role", "summary") \
+        .order("created_at", desc=True) \
+        .limit(1) \
+        .execute()
 
-    return "\n".join(lines)
+    # 直近10件の通常メッセージを取得
+    messages = get_recent_messages(user_id, limit=10)
+
+    lines = []
+
+    if summary_result.data:
+        lines.append("【過去の会話要約】")
+        lines.append(summary_result.data[0]["content"])
+
+    if messages:
+        lines.append("【直近の会話】")
+        for msg in messages:
+            prefix = "ユーザー" if msg["role"] == "user" else "かんべ"
+            lines.append(f"{prefix}: {msg['content'][:200]}")
+
+    return "\n".join(lines) if lines else ""
 
 
 def summarize_old_messages(user_id: str, keep_recent: int = 30) -> None:
