@@ -99,42 +99,36 @@ def _build_morning_message(
     events_text: str | None,
     tasks_text: str | None,
     weather_text: str = "",
-    email_text: str = "",
 ) -> str:
     """朝のダイジェストメッセージ"""
     now = datetime.now(JST)
-    date_str = now.strftime("%Y年%m月%d日(%a)")
-    weekday_ja = {"Mon": "月", "Tue": "火", "Wed": "水", "Thu": "木", "Fri": "金", "Sat": "土", "Sun": "日"}
-    for en, ja in weekday_ja.items():
-        date_str = date_str.replace(en, ja)
+    weekday_ja = ["月", "火", "水", "木", "金", "土", "日"]
+    date_str = now.strftime("%Y年%m月%d日") + f"({weekday_ja[now.weekday()]})"
 
-    msg = f"☀️ おはようございます！\n📆 {date_str}\n"
+    msg = f"おはよー！\n{date_str}\n"
 
     if weather_text:
         msg += f"\n{weather_text}\n"
 
     if events_text:
-        msg += f"\n📋 今日の予定:\n{events_text}"
+        msg += f"\n今日の予定:\n{events_text}"
     else:
-        msg += "\n📋 今日の予定はありません"
-
-    if email_text:
-        msg += f"\n\n{email_text}"
+        msg += "\n今日は予定なしだよ"
 
     if tasks_text:
         msg += f"\n\n{tasks_text}"
 
-    msg += "\n\n今日も良い一日を！💪"
+    msg += "\n\n今日もいってらっしゃい！"
     return msg
 
 
 def _build_evening_message(tasks_text: str | None) -> str:
     """夜のリマインダーメッセージ"""
-    msg = "🌙 お疲れさまでした！\n"
+    msg = "おつかれ！\n"
     if tasks_text:
         msg += f"\n{tasks_text}"
     else:
-        msg += "\n✅ 期限が迫っているタスクはありません。ゆっくり休んでください！"
+        msg += "\n期限が迫ってるタスクはないよ。ゆっくり休んで！"
     return msg
 
 
@@ -142,16 +136,15 @@ def _build_evening_message(tasks_text: str | None) -> str:
 
 
 async def send_morning_digest(send_fn, services: dict, user_id: str):
-    """朝のダイジェスト（カレンダー + タスク + 天気 + メール）"""
+    """朝のダイジェスト（カレンダー + タスク + 天気）"""
     try:
         events_text = _get_today_events(services["calendar"])
         tasks_text = get_due_tasks()
         weather_text = _get_weather_text()
-        email_text = _get_email_summary(services.get("gmail"))
-        message = _build_morning_message(events_text, tasks_text, weather_text, email_text)
+        message = _build_morning_message(events_text, tasks_text, weather_text)
         await send_fn(user_id, message)
     except Exception as e:
-        await send_fn(user_id, f"⚠️ 朝の通知でエラーが発生しました:\n{str(e)}")
+        await send_fn(user_id, f"朝の通知でエラーが出たわ:\n{str(e)}")
 
 
 async def send_evening_reminder(send_fn, user_id: str):

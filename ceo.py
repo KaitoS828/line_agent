@@ -123,7 +123,7 @@ class CEOAgent:
 
     # ── テキストメッセージ処理 ──────────────────────────────────
 
-    def process_text(self, user_message: str, user_id: str = "default") -> str:
+    def process_text(self, user_message: str, user_id: str = "default", on_delegate=None) -> str:
         """テキストメッセージを処理 — 適切なエージェントに委譲"""
         # 会話記憶: ユーザーメッセージを保存 & コンテキスト取得
         if SUPABASE_URL:
@@ -172,6 +172,9 @@ class CEOAgent:
                 return "✅ 完了しました。"
 
             if response.stop_reason == "tool_use":
+                if on_delegate:
+                    on_delegate()
+                    on_delegate = None  # 最初の委譲時のみ通知
                 tool_results = []
                 for block in response.content:
                     if block.type == "tool_use":

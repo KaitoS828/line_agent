@@ -96,27 +96,24 @@ def prepare_brief(title: str, description: str = "") -> str:
 
 
 def check_and_prepare(calendar_actions) -> list[str]:
-    """直近の会議をチェックして、ブリーフィングを生成"""
+    """直近の会議をチェックして通知を生成"""
     meetings = get_upcoming_meetings(calendar_actions, minutes_ahead=45)
     briefs = []
 
     for meeting in meetings:
-        brief_content = prepare_brief(meeting["title"], meeting["description"])
-        if brief_content:
-            end_str = ""
-            if meeting["end"]:
-                try:
-                    end_dt = datetime.fromisoformat(meeting["end"])
-                    end_str = f"-{end_dt.strftime('%H:%M')}"
-                except (ValueError, TypeError):
-                    pass
+        end_str = ""
+        if meeting["end"]:
+            try:
+                end_dt = datetime.fromisoformat(meeting["end"])
+                end_str = f"-{end_dt.strftime('%H:%M')}"
+            except (ValueError, TypeError):
+                pass
 
-            msg = (
-                f"🔔 まもなく会議があります\n\n"
-                f"📋 {meeting['title']} ({meeting['start']}{end_str})\n\n"
-                f"📊 準備ブリーフィング:\n{brief_content}"
-            )
-            briefs.append(msg)
-            _notified_events.add(meeting["id"])
+        msg = (
+            f"ねえ、まもなく予定始まるよ！\n\n"
+            f"📋 {meeting['title']} ({meeting['start']}{end_str})"
+        )
+        briefs.append(msg)
+        _notified_events.add(meeting["id"])
 
     return briefs

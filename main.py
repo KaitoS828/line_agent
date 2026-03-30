@@ -134,9 +134,17 @@ async def process_text(user_id: str, text: str) -> None:
     """テキスト → CEOが判断して適切なエージェントに委譲"""
     try:
         log_request("text")
-        await send_line_message(user_id, "ちょっと待ってねー！")
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(None, ceo.process_text, text, user_id)
+
+        def notify_delegate():
+            asyncio.run_coroutine_threadsafe(
+                send_line_message(user_id, "ちょっと待ってねー！"),
+                loop,
+            )
+
+        response = await loop.run_in_executor(
+            None, ceo.process_text, text, user_id, notify_delegate
+        )
         image_url, caption = extract_line_image_payload(response)
         if image_url:
             await send_line_image(user_id, image_url)
