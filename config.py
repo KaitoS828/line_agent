@@ -27,6 +27,10 @@ SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 EXA_API_KEY = os.environ.get("EXA_API_KEY", "")
 
+# ── Notion ────────────────────────────────────────────────────
+NOTION_API_KEY = os.environ.get("NOTION_API_KEY", "")
+NOTION_DATABASE_ID = os.environ.get("NOTION_DATABASE_ID", "")
+
 # ── 天気 ──────────────────────────────────────────────────────
 WEATHER_CITY = os.environ.get("WEATHER_CITY", "Tokyo")
 
