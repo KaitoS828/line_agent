@@ -1,5 +1,6 @@
 """スケジューラー — 能動的通知の中枢"""
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
